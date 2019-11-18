@@ -43,7 +43,7 @@ public class JenkinsJobUpdater implements JobUpdater {
         final List<JobUpdateResult> jobsCreated = new LinkedList<>();
         final List<JobUpdateResult> jobsArchived = new LinkedList<>();
         final List<JobUpdateResult> jobsRewritten = new LinkedList<>();
-        final List<JobUpdateResult> jobsRevived= new LinkedList<>();
+        final List<JobUpdateResult> jobsRevived = new LinkedList<>();
 
         final Set<String> archivedJobs = new HashSet<>(Arrays.asList(Objects.requireNonNull(jobArchiveRoot.list())));
 
@@ -104,6 +104,7 @@ public class JenkinsJobUpdater implements JobUpdater {
                     Paths.get(jobDirPath, JENKINS_JOB_CONFIG_FILE),
                     job.generateTemplate()
             );
+            throwFromJenkinsResult(JenkinsCliWrapper.getCli().reloadOrRegisterManuallyUploadedJob(jobsRoot, jobName));
             return new JobUpdateResult(jobName, true);
         };
     }
@@ -116,6 +117,7 @@ public class JenkinsJobUpdater implements JobUpdater {
             LOGGER.info("Reviving job " + jobName);
             LOGGER.info("Moving directory " + src.getAbsolutePath() + " to " + dst.getAbsolutePath());
             Utils.moveFile(src, dst);
+            throwFromJenkinsResult(JenkinsCliWrapper.getCli().reloadOrRegisterManuallyUploadedJob(jobsRoot, jobName));
             return new JobUpdateResult(jobName, true);
         };
     }
@@ -128,6 +130,7 @@ public class JenkinsJobUpdater implements JobUpdater {
             LOGGER.info("Archiving job " + jobName);
             LOGGER.info("Moving directory " + src.getAbsolutePath() + " to " + dst.getAbsolutePath());
             Utils.moveFile(src, dst);
+            throwFromJenkinsResult(JenkinsCliWrapper.getCli().deleteJobs(jobName));
             return new JobUpdateResult(jobName, true);
         };
     }
@@ -139,8 +142,19 @@ public class JenkinsJobUpdater implements JobUpdater {
             LOGGER.info("Rewriting job " + jobName);
             LOGGER.info("Writing to file " + jobConfig.getAbsolutePath());
             Utils.writeToFile(jobConfig, job.generateTemplate());
+            throwFromJenkinsResult(JenkinsCliWrapper.getCli().reloadOrRegisterManuallyUploadedJob(jobsRoot, jobName));
             return new JobUpdateResult(jobName, true);
         };
+    }
+
+    private void throwFromJenkinsResult(JenkinsCliWrapper.ClientResponse r) throws IOException {
+        if (r.sshEngineExeption != null) {
+            throw new IOException("Probable ssh engine fail in " + r.cmd, r.sshEngineExeption);
+        } else {
+            if (r.remoteCommandreturnValue != 0) {
+                throw new IOException("ssh command " + r.cmd + " returned non sero" + r.remoteCommandreturnValue);
+            }
+        }
     }
 
     interface JobUpdateFunction {
